@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"runtime"
 
 	"SecureNest/internal/vault"
 )
@@ -32,5 +33,15 @@ func main() {
 		log.Fatal(err)
 	}
 
+	zeroMemory(password)
+	runtime.KeepAlive(password)
+
 	fmt.Println("Done.")
+}
+
+//go:noinline
+func zeroMemory(data []byte) {
+	for i := range data {
+		data[i] = 0
+	}
 }
