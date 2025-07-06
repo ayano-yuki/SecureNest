@@ -13,8 +13,7 @@ func ReadPassword() ([]byte, error) {
 	return term.ReadPassword(int(os.Stdin.Fd()))
 }
 
-// 再帰的にフォルダを処理
-func ProcessFolderRecursive(mode string, rootDir string, password []byte, iterations int) error {
+func ProcessFolderRecursive(mode string, rootDir string, password []byte, p Argon2Params) error {
 	return filepath.WalkDir(rootDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -36,7 +35,7 @@ func ProcessFolderRecursive(mode string, rootDir string, password []byte, iterat
 		fmt.Printf("[%s] %s -> %s\n", mode, path, outputPath)
 
 		if mode == "encrypt" {
-			err = EncryptFile(path, outputPath, password, iterations)
+			err = EncryptFile(path, outputPath, password, p)
 		} else {
 			err = DecryptFile(path, outputPath, password)
 		}
@@ -45,7 +44,6 @@ func ProcessFolderRecursive(mode string, rootDir string, password []byte, iterat
 			return nil
 		}
 
-		// 元ファイルを削除
 		if removeErr := os.Remove(path); removeErr != nil {
 			fmt.Fprintf(os.Stderr, "Error removing %s: %v\n", path, removeErr)
 		}

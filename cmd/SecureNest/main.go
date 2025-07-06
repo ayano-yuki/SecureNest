@@ -12,7 +12,6 @@ import (
 func main() {
 	mode := flag.String("mode", "", "encrypt or decrypt")
 	dir := flag.String("dir", "", "target directory (recursive)")
-	iter := flag.Int("iter", 200000, "PBKDF2 iterations (encrypt)")
 	flag.Parse()
 
 	if *mode != "encrypt" && *mode != "decrypt" {
@@ -29,7 +28,14 @@ func main() {
 	}
 	fmt.Println()
 
-	if err := vault.ProcessFolderRecursive(*mode, *dir, password, *iter); err != nil {
+	// Argon2パラメータ
+	params := vault.Argon2Params{
+		Time:    3,
+		Memory:  64 * 1024, // 64MB
+		Threads: uint8(runtime.NumCPU()),
+	}
+
+	if err := vault.ProcessFolderRecursive(*mode, *dir, password, params); err != nil {
 		log.Fatal(err)
 	}
 

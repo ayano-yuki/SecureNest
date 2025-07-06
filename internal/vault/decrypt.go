@@ -1,8 +1,7 @@
 package vault
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
+	"crypto/chacha20poly1305"
 	"errors"
 	"io"
 	"os"
@@ -21,44 +20,49 @@ func DecryptFile(inputPath, outputPath string, password []byte) error {
 	}
 	defer out.Close()
 
-	// ヘッダ
 	salt := make([]byte, SaltSize)
 	nonce := make([]byte, NonceSize)
-
 	if _, err = io.ReadFull(in, salt); err != nil {
 		return err
 	}
 	if _, err = io.ReadFull(in, nonce); err != nil {
 		return err
 	}
-	iterations, err := readUint32(in)
+	time, err := readUint32(in)
+	if err != nil {
+		return err
+	}
+	memory, err := readUint32(in)
+	if err != nil {
+		return err
+	}
+	threadBuf := make([]byte, 1)
+	if _, err = io.ReadFull(in, threadBuf); err != nil {
+		return err
+	}
+	threads := threadBuf[0]
+
+	p := Argon2Params{
+		Time:    time,
+		Memory:  memory,
+		Threads: threads,
+	}
+
+	key := deriveKey(password, salt, p)
+
+	aead, err := chacha20poly1305.New(key)
 	if err != nil {
 		return err
 	}
 
-	// Key
-	key := deriveKey(password, salt, int(iterations))
-
-	// AES-GCM
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return err
-	}
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return err
-	}
-
-	// 暗号データ
 	ciphertext, err := io.ReadAll(in)
 	if err != nil {
 		return err
 	}
 
-	// 復号
-	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
+	plaintext, err := aead.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return errors.New("decryption failed (wrong password?)")
+		return errors.New("decryption failed (wrong password or corrupted data)")
 	}
 
 	_, err = out.Write(plaintext)

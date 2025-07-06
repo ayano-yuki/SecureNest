@@ -1,28 +1,24 @@
 package vault
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
+	"crypto/chacha20poly1305"
 	"io"
 	"os"
 )
 
-func EncryptFile(inputPath, outputPath string, password []byte, iterations int) error {
-	// 入力ファイル
+func EncryptFile(inputPath, outputPath string, password []byte, p Argon2Params) error {
 	in, err := os.Open(inputPath)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
 
-	// 出力ファイル
 	out, err := os.Create(outputPath)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
 
-	// Salt & Nonce
 	salt, err := generateSalt()
 	if err != nil {
 		return err
@@ -32,34 +28,33 @@ func EncryptFile(inputPath, outputPath string, password []byte, iterations int) 
 		return err
 	}
 
-	// Key
-	key := deriveKey(password, salt, iterations)
+	key := deriveKey(password, salt, p)
 
-	// AES-GCM
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return err
-	}
-	aesgcm, err := cipher.NewGCM(block)
+	aead, err := chacha20poly1305.New(key)
 	if err != nil {
 		return err
 	}
 
-	// 入力データ
 	plaintext, err := io.ReadAll(in)
 	if err != nil {
 		return err
 	}
-	ciphertext := aesgcm.Seal(nil, nonce, plaintext, nil)
+	ciphertext := aead.Seal(nil, nonce, plaintext, nil)
 
-	// ヘッダ書き込み
+	// ヘッダ
 	if _, err = out.Write(salt); err != nil {
 		return err
 	}
 	if _, err = out.Write(nonce); err != nil {
 		return err
 	}
-	if err = writeUint32(out, uint32(iterations)); err != nil {
+	if err = writeUint32(out, p.Time); err != nil {
+		return err
+	}
+	if err = writeUint32(out, p.Memory); err != nil {
+		return err
+	}
+	if _, err = out.Write([]byte{p.Threads}); err != nil {
 		return err
 	}
 
